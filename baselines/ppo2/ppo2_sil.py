@@ -96,7 +96,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     ac_space = env.action_space
 
     # Calculate the batch_size
-    nbatch = nenvs * nsteps
+    counter = 1 if comm is not None else nenvs
+    nbatch = counter * nsteps
+    total_batch_size = nsteps * comm.get_size() if comm is not None else nbatch  # 用于计算update数
     nbatch_train = nbatch // nminibatches
     is_mpi_root = (MPI is None or MPI.COMM_WORLD.Get_rank() == 0)
 
@@ -127,7 +129,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Start total timer
     tfirststart = time.perf_counter()
 
-    nupdates = total_timesteps//nbatch
+    nupdates = total_timesteps//total_batch_size
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
         # Start timer
@@ -198,7 +200,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             ev = explained_variance(values, returns)
             logger.logkv("misc/serial_timesteps", update*nsteps)
             logger.logkv("misc/nupdates", update)
-            logger.logkv("misc/total_timesteps", update*nbatch)
+            logger.logkv("misc/total_timesteps", update*total_batch_size)
             logger.logkv("fps", fps)
             logger.logkv("misc/explained_variance", float(ev))
             logger.logkv('eprewmean', safemean([epinfo['r'] for epinfo in epinfobuf]))

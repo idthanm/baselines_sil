@@ -95,8 +95,11 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     ac_space = env.action_space
 
     # Calculate the batch_size
-    nbatch = nenvs * nsteps
-    nbatch_train = nbatch // nminibatches
+    counter = 1 if comm is not None else nenvs
+    nbatch = counter * nsteps
+    total_batch_size = nsteps*comm.get_size() if comm is not None else nbatch  # 用于计算update数
+    nbatch_train = nbatch // nminibatches  # 用nven, nstep是一个env步长 nbatch是一个update一共收集的batch数，然后分成
+    # nminibatches个minibatch来进行更新；而用mpi，每个环境的nstep就是nbatch，其被分成nminibatches个minibatch，不同环境之间平均
     is_mpi_root = (MPI is None or MPI.COMM_WORLD.Get_rank() == 0)
 
     # Instantiate the model object (that creates act_model and train_model)
@@ -125,7 +128,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     # Start total timer
     tfirststart = time.perf_counter()
 
-    nupdates = total_timesteps//nbatch
+    nupdates = total_timesteps//total_batch_size
     for update in range(1, nupdates+1):
         assert nbatch % nminibatches == 0
         # Start timer
@@ -195,7 +198,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             ev = explained_variance(values, returns)
             logger.logkv("misc/serial_timesteps", update*nsteps)
             logger.logkv("misc/nupdates", update)
-            logger.logkv("misc/total_timesteps", update*nbatch)
+            logger.logkv("misc/total_timesteps", update*total_batch_size)
             logger.logkv("fps", fps)
             logger.logkv("misc/explained_variance", float(ev))
             logger.logkv('eprewmean', safemean([epinfo['r'] for epinfo in epinfobuf]))
