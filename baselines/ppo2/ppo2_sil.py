@@ -96,9 +96,9 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     ac_space = env.action_space
 
     # Calculate the batch_size
-    counter = 1 if comm is not None else nenvs
+    counter = 1 if MPI.COMM_WORLD.Get_size() > 1 else nenvs
     nbatch = counter * nsteps
-    total_batch_size = nsteps * comm.get_size() if comm is not None else nbatch  # 用于计算update数
+    total_batch_size = nsteps * MPI.COMM_WORLD.Get_size() if MPI.COMM_WORLD.Get_size() > 1 else nbatch  # 用于计算update数
     nbatch_train = nbatch // nminibatches
     is_mpi_root = (MPI is None or MPI.COMM_WORLD.Get_rank() == 0)
 
