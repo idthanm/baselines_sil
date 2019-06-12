@@ -57,7 +57,7 @@ def train(args, extra_args):
     total_timesteps = int(args.num_timesteps)
     seed = args.seed
 
-    learn = get_learn_function(args.alg)
+    learn = get_learn_function(args.alg, args.alg_submodule)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
 
@@ -163,8 +163,8 @@ def get_alg_module(alg, submodule=None):
     return alg_module
 
 
-def get_learn_function(alg):
-    return get_alg_module(alg).learn
+def get_learn_function(alg, submodule=None):
+    return get_alg_module(alg, submodule).learn
 
 
 def get_learn_function_defaults(alg, env_type):
