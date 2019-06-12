@@ -10,7 +10,7 @@ try:
     from mpi4py import MPI
 except ImportError:
     MPI = None
-from baselines.ppo2.runner import Runner
+from baselines.ppo2.runner_sil import Runner
 
 
 def constfn(val):
@@ -108,7 +108,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
     model = model_fn(policy=policy, ob_space=ob_space, ac_space=ac_space, nbatch_act=nenvs, nbatch_train=nbatch_train,
                     nsteps=nsteps, ent_coef=ent_coef, vf_coef=vf_coef,
                     max_grad_norm=max_grad_norm, comm=comm, mpi_rank_weight=mpi_rank_weight, sil_update=sil_update,
-                    sil_value=sil_value, sil_alpha=sil_alpha, sil_beta=sil_beta)
+                    sil_value=sil_value, sil_alpha=sil_alpha, sil_beta=sil_beta, fn_reward=lambda x: x, fn_obs=lambda x: x)
 
     if load_path is not None:
         model.load(load_path)
@@ -166,7 +166,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     mblossvals.append(model.train(lrnow, cliprangenow, *slices))
-            sil_loss, sil_adv, sil_samples, sil_nlogp = model.sil_train()
+            sil_loss, sil_adv, sil_samples, sil_nlogp = model.sil_train(lrnow)
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches

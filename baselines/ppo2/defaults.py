@@ -23,3 +23,6 @@ def atari():
 
 def retro():
     return atari()
+
+def user():
+    return mujoco()

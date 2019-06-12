@@ -352,7 +352,7 @@ class SelfImitation(object):
         self.var = var
         self.train_op = optim.apply_gradients(grads_and_var)
 
-    def _train(self, sess):
+    def _train(self, sess, LR, lr):
         obs, actions, returns, weights, idxes = self.sample_batch(self.batch_size)
         if obs is None:
             return 0, 0, 0, 0
@@ -361,14 +361,15 @@ class SelfImitation(object):
                 [self.loss, self.adv, self.mean_adv, self.num_valid_samples,
                     self.neg_log_p, self.train_op], 
                 {self.model_ob: obs, 
-                 self.A: actions, 
+                 self.A: actions,
+                 LR: lr,
                  self.R: returns,
                  self.W: weights})       
 
         self.buffer.update_priorities(idxes, adv)
         return loss, mean_adv, samples, nlogp
 
-    def train(self, sess):
+    def train(self, sess, LR, lr):
         if self.n_update == 0:
             return 0, 0, 0, 0
 
@@ -377,9 +378,9 @@ class SelfImitation(object):
         if self.n_update < 1:
             update_ratio = int(1/self.n_update + 1e-8)
             if self.train_count % update_ratio == 0:
-                loss, adv, samples, nlogp = self._train(sess)
+                loss, adv, samples, nlogp = self._train(sess, LR, lr)
         else: # n_update > 1 
             for n in range(int(self.n_update)):
-                loss, adv, samples, nlogp = self._train(sess)
+                loss, adv, samples, nlogp = self._train(sess, LR, lr)
 
         return loss, adv, samples, nlogp

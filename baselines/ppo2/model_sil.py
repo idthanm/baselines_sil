@@ -147,8 +147,8 @@ class Model(object):
         if MPI is not None:
             sync_from_root(sess, global_variables, comm=comm) #pylint: disable=E1101
 
-    def sil_train(self):
-        return self.sil.train(self.sess)
+    def sil_train(self, lr):
+        return self.sil.train(self.sess, self.LR, lr)
 
     def train(self, lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
         # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
