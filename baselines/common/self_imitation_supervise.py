@@ -232,6 +232,7 @@ class SelfImitation(object):
         self.W = tf.placeholder(tf.float32, [None])
         self.build_loss_op()
 
+
     def set_loss_weight(self, w):
         self.w_loss = w
 
@@ -344,6 +345,8 @@ class SelfImitation(object):
         delta = tf.clip_by_value(v_estimate - v_target, -self.clip, 0) * mask
         self.vf_loss = tf.reduce_sum(self.W * v_estimate * tf.stop_gradient(delta)) / self.num_samples
         self.loss += 0.5 * self.w_value * self.vf_loss
+        self.sil_loss_names = ['policy_loss', 'entropy', 'value_loss', 'superv_loss']
+        self.sil_stats_list = [self.pg_loss, entropy, self.vf_loss, self.superv_loss]
         return self.loss
 
     def build_train_op(self, params, optim, max_grad_norm=0.5):
@@ -364,26 +367,27 @@ class SelfImitation(object):
     def _train(self, sess, LR, lr):
         obs, actions, returns, weights, idxes = self.sample_batch(self.batch_size)
         if obs is None:
-            return 0, 0, 0, 0
+            return [0, 0, 0, 0], 0, 0, 0
 
-        loss, adv, mean_adv, samples, nlogp, _ = sess.run(
-                [self.loss, self.adv, self.mean_adv, self.num_valid_samples,
-                    self.neg_log_p, self.train_op], 
+        pg_loss, entropy, vf_loss, superv_loss, adv, mean_adv, samples, nlogp, _ = sess.run(
+                self.sil_stats_list + [self.adv, self.mean_adv, self.num_valid_samples,
+                       self.neg_log_p, self.train_op],
                 {self.model_ob: obs, 
                  self.A: actions,
                  LR: lr,
                  self.R: returns,
-                 self.W: weights})       
+                 self.W: weights})
 
+        loss = [pg_loss, entropy, vf_loss, superv_loss]
         self.buffer.update_priorities(idxes, returns)
         return loss, mean_adv, samples, nlogp
 
     def train(self, sess, LR, lr):
         if self.n_update == 0:
-            return 0, 0, 0, 0
-
+            return [0, 0, 0, 0], 0, 0, 0
+        sil_mblossvals = []
         self.train_count += 1
-        loss, adv, samples, nlogp = 0, 0, 0, 0
+        loss, adv, samples, nlogp = [0, 0, 0, 0], 0, 0, 0
         if self.n_update < 1:
             update_ratio = int(1/self.n_update + 1e-8)
             if self.train_count % update_ratio == 0:
@@ -391,5 +395,6 @@ class SelfImitation(object):
         else: # n_update > 1 
             for n in range(int(self.n_update)):
                 loss, adv, samples, nlogp = self._train(sess, LR, lr)
+                sil_mblossvals.append(loss)
 
-        return loss, adv, samples, nlogp
+        return sil_mblossvals, samples

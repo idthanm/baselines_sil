@@ -168,7 +168,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
                     mbinds = inds[start:end]
                     slices = (arr[mbinds] for arr in (obs, returns, masks, actions, values, neglogpacs))
                     mblossvals.append(model.train(lrnow, cliprangenow, *slices))
-            sil_loss, sil_adv, sil_samples, sil_nlogp = model.sil_train(lrnow)
+            sil_mblossvals, sil_samples = model.sil_train(lrnow)
         else: # recurrent version
             assert nenvs % nminibatches == 0
             envsperbatch = nenvs // nminibatches
@@ -186,6 +186,7 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
 
         # Feedforward --> get losses --> update
         lossvals = np.mean(mblossvals, axis=0)
+        sil_lossvals = np.mean(sil_mblossvals, axis=0)
         # End timer
         tnow = time.perf_counter()
         # Calculate the fps (frame per second)
@@ -212,6 +213,8 @@ def learn(*, network, env, total_timesteps, eval_env = None, seed=None, nsteps=2
             for (lossval, lossname) in zip(lossvals, model.loss_names):
                 logger.logkv('loss/' + lossname, lossval)
             if sil_update > 0:
+                for (sil_lossval, sil_lossname) in zip(sil_lossvals, model.sil.sil_loss_names):
+                    logger.logkv('sil_loss/' + sil_lossname, sil_lossval)
                 logger.logkv("sil_samples", sil_samples)
             logger.dumpkvs()
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir() and is_mpi_root:
