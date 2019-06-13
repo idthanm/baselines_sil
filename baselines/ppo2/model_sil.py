@@ -3,7 +3,7 @@ import functools
 
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
-from baselines.common.self_imitation import SelfImitation
+from baselines.common.self_imitation_supervise import SelfImitation
 
 
 try:
@@ -29,7 +29,7 @@ class Model(object):
     def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
                 nsteps, ent_coef, vf_coef, max_grad_norm, mpi_rank_weight=1,
                  comm=None, microbatch_size=None, gamma=0.99, sil_update=1, fn_reward=None,
-                 fn_obs=None, sil_value=0.01, sil_alpha=0.6, sil_beta=0.1):
+                 fn_obs=None, sil_value=0.01, superv_coef=0.01, sil_alpha=0.6, sil_beta=0.1):
         self.sess = sess = get_session()
 
         if MPI is not None and comm is None:
@@ -120,11 +120,11 @@ class Model(object):
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
         self.stats_list = [pg_loss, vf_loss, entropy, approxkl, clipfrac]
 
-        self.sil = SelfImitation(sil_model.X, sil_model.vf,
-                                 sil_model.entropy, sil_model.value, sil_model.neg_log_prob,
+        self.sil = SelfImitation(sil_model.X, sil_model.vf, sil_model.entropy,
+                                 sil_model.action, sil_model.value, sil_model.neg_log_prob,
                                  ac_space, fn_reward=fn_reward, fn_obs=fn_obs,
                                  n_env=nbatch_act, n_update=sil_update,
-                                 w_value=sil_value,
+                                 w_value=sil_value, w_superv=superv_coef,
                                  w_entropy=ent_coef, gamma=gamma,
                                  max_steps=50000, max_nlogp=100,
                                  alpha=sil_alpha, beta=sil_beta)
