@@ -375,7 +375,7 @@ class SelfImitation(object):
                  self.R: returns,
                  self.W: weights})       
 
-        self.buffer.update_priorities(idxes, adv)
+        self.buffer.update_priorities(idxes, returns)
         return loss, mean_adv, samples, nlogp
 
     def train(self, sess, LR, lr):
