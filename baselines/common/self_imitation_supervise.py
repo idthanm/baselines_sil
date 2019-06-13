@@ -311,7 +311,7 @@ class SelfImitation(object):
             return None, None, None, None, None
 
     def build_loss_op(self):
-        mask = tf.where(self.R - 30 * tf.ones_like(self.R) > 0.0,
+        mask = tf.where(self.R - 60 * tf.ones_like(self.R) > 0.0,
                 tf.ones_like(self.R), tf.zeros_like(self.R))
         self.num_valid_samples = tf.reduce_sum(mask)
         self.num_samples = tf.maximum(self.num_valid_samples, self.min_batch_size)
@@ -326,7 +326,7 @@ class SelfImitation(object):
         self.adv = tf.stop_gradient(
                 tf.clip_by_value(self.R - tf.squeeze(self.model_vf), 0.0, self.clip))
         self.mean_adv = tf.reduce_sum(self.adv) / self.num_samples
-        self.pg_loss = tf.reduce_sum(self.W * self.adv * clipped_nlogp) / self.num_samples
+        self.pg_loss = tf.reduce_sum(self.W * self.adv * clipped_nlogp * mask) / self.num_samples
 
 
         # Entropy regularization
