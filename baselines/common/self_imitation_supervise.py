@@ -23,8 +23,8 @@ class ReplayBuffer(object):
     def __len__(self):
         return len(self._storage)
     
-    def add(self, obs_t, action, R):
-        data = (obs_t, action, R)
+    def add(self, obs_t, action, R, for_mask):
+        data = (obs_t, action, R, for_mask)
 
         if self._next_idx >= len(self._storage):
             self._storage.append(data)
@@ -33,14 +33,15 @@ class ReplayBuffer(object):
         self._next_idx = (self._next_idx + 1) % self._maxsize
 
     def _encode_sample(self, idxes):
-        obses_t, actions, returns= [], [], []
+        obses_t, actions, returns, for_masks= [], [], [], []
         for i in idxes:
             data = self._storage[i]
-            obs_t, action, R = data
+            obs_t, action, R , for_mask= data
             obses_t.append(np.array(obs_t, copy=False))
             actions.append(np.array(action, copy=False))
             returns.append(R)
-        return np.array(obses_t), np.array(actions), np.array(returns)
+            for_masks.append(for_mask)
+        return np.array(obses_t), np.array(actions), np.array(returns), np.array(for_masks)
 
     def sample(self, batch_size):
         """Sample a batch of experiences.
@@ -230,17 +231,19 @@ class SelfImitation(object):
 
         self.R = tf.placeholder(tf.float32, [None])
         self.W = tf.placeholder(tf.float32, [None])
+        self.EPIREW = tf.placeholder(tf.float32, [None])
         self.build_loss_op()
 
 
     def set_loss_weight(self, w):
         self.w_loss = w
 
-    def add_episode(self, trajectory):
+    def add_episode(self, trajectory, epirew):
         obs = []
         actions = []
         rewards = []
         dones = []
+        epirew_ = []
 
         if self.stack > 1:
             ob_shape = list(trajectory[0][0].shape)
@@ -261,19 +264,20 @@ class SelfImitation(object):
             actions.append(action)
             rewards.append(self.fn_reward(reward))
             dones.append(False)
+            epirew_.append(epirew)
         dones[len(dones)-1]=True
         returns = discount_with_dones(rewards, dones, self.gamma)
-        for (ob, action, R) in list(zip(obs, actions, returns)):
-            self.buffer.add(ob, action, R)
+        for (ob, action, R, for_mask) in list(zip(obs, actions, returns, epirew_)):
+            self.buffer.add(ob, action, R, for_mask)
 
-    def update_buffer(self, trajectory):
+    def update_buffer(self, trajectory, epirew):
         positive_reward = False
         for (ob, a, r) in trajectory:
             if r > 0:
                 positive_reward = True
                 break
         if positive_reward:
-            self.add_episode(trajectory)
+            self.add_episode(trajectory, epirew)
             self.total_steps.append(len(trajectory))
             self.total_rewards.append(np.sum([x[2] for x in trajectory]))
             while np.sum(self.total_steps) > self.max_steps and len(self.total_steps) > 1:
@@ -291,7 +295,7 @@ class SelfImitation(object):
             return np.max(self.total_rewards)
         return 0
 
-    def step(self, obs, actions, rewards, dones):
+    def step(self, obs, actions, rewards, dones, infos):
         for n in range(self.n_env):
             if self.n_update > 0:
                 self.running_episodes[n].append([obs[n], actions[n], rewards[n]])
@@ -300,7 +304,8 @@ class SelfImitation(object):
 
         for n, done in enumerate(dones):
             if done:
-                self.update_buffer(self.running_episodes[n])
+                epirew = infos[n].get('episode')["r"]
+                self.update_buffer(self.running_episodes[n], epirew)
                 self.running_episodes[n] = []
 
     def sample_batch(self, batch_size):
@@ -308,11 +313,14 @@ class SelfImitation(object):
             batch_size = min(batch_size, len(self.buffer))
             return self.buffer.sample(batch_size, beta=self.beta)
         else:
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
     def build_loss_op(self):
-        mask = tf.where(self.R - 60 * tf.ones_like(self.R) > 0.0,
-                tf.ones_like(self.R), tf.zeros_like(self.R))
+        #mask = tf.where(self.R - 60 * tf.ones_like(self.R) > 0.0,
+        #        tf.ones_like(self.R), tf.zeros_like(self.R))
+        mask = tf.where(self.EPIREW - 60 * tf.ones_like(self.EPIREW) > 0.0,
+                tf.ones_like(self.EPIREW), tf.zeros_like(self.EPIREW))
+        # self.valid_samples = self.EPIREW * mask
         self.num_valid_samples = tf.reduce_sum(mask)
         self.num_samples = tf.maximum(self.num_valid_samples, self.min_batch_size)
        
@@ -326,11 +334,11 @@ class SelfImitation(object):
         self.adv = tf.stop_gradient(
                 tf.clip_by_value(self.R - tf.squeeze(self.model_vf), 0.0, self.clip))
         self.mean_adv = tf.reduce_sum(self.adv) / self.num_samples
-        self.pg_loss = tf.reduce_sum(self.W * self.adv * clipped_nlogp * mask) / self.num_samples
+        self.pg_loss = 0.0 * tf.reduce_sum(self.W * self.adv * clipped_nlogp * mask) / self.num_samples
 
 
         # Entropy regularization
-        entropy = tf.reduce_sum(self.W * self.model_entropy * mask) / self.num_samples
+        entropy = 0.0 * tf.reduce_sum(self.W * self.model_entropy * mask) / self.num_samples
         self.loss = self.pg_loss - entropy * self.w_entropy
 
         # Supervised term
@@ -343,7 +351,7 @@ class SelfImitation(object):
         v_target = self.R
         v_estimate = tf.squeeze(self.model_vf)
         delta = tf.clip_by_value(v_estimate - v_target, -self.clip, 0) * mask
-        self.vf_loss = tf.reduce_sum(self.W * v_estimate * tf.stop_gradient(delta)) / self.num_samples
+        self.vf_loss = 0.0 * tf.reduce_sum(self.W * v_estimate * tf.stop_gradient(delta)) / self.num_samples
         self.loss += 0.5 * self.w_value * self.vf_loss
         self.sil_loss_names = ['policy_loss', 'entropy', 'value_loss', 'superv_loss']
         self.sil_stats_list = [self.pg_loss, entropy, self.vf_loss, self.superv_loss]
@@ -365,7 +373,7 @@ class SelfImitation(object):
         self.train_op = optim.apply_gradients(grads_and_var)
 
     def _train(self, sess, LR, lr):
-        obs, actions, returns, weights, idxes = self.sample_batch(self.batch_size)
+        obs, actions, returns, epirew, weights, idxes = self.sample_batch(self.batch_size)
         if obs is None:
             return [0, 0, 0, 0], 0, 0, 0
 
@@ -375,17 +383,19 @@ class SelfImitation(object):
                 {self.model_ob: obs, 
                  self.A: actions,
                  LR: lr,
+                 self.EPIREW: epirew,
                  self.R: returns,
                  self.W: weights})
 
         loss = [pg_loss, entropy, vf_loss, superv_loss]
-        self.buffer.update_priorities(idxes, returns)
+        self.buffer.update_priorities(idxes, adv)
         return loss, mean_adv, samples, nlogp
 
     def train(self, sess, LR, lr):
         if self.n_update == 0:
             return [0, 0, 0, 0], 0, 0, 0
         sil_mblossvals = []
+        samples_list = []
         self.train_count += 1
         loss, adv, samples, nlogp = [0, 0, 0, 0], 0, 0, 0
         if self.n_update < 1:
@@ -396,5 +406,6 @@ class SelfImitation(object):
             for n in range(int(self.n_update)):
                 loss, adv, samples, nlogp = self._train(sess, LR, lr)
                 sil_mblossvals.append(loss)
+                samples_list.append(samples)
 
-        return sil_mblossvals, samples
+        return sil_mblossvals, samples_list

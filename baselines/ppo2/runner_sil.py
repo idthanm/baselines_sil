@@ -39,7 +39,7 @@ class Runner(AbstractEnvRunner):
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)
             mb_rewards.append(rewards)
-            self.model.sil.step(self.obs.copy(), actions, rewards, self.dones.copy())
+            self.model.sil.step(self.obs.copy(), actions, rewards, self.dones.copy(), infos)
         #batch of steps to batch of rollouts
         mb_obs = np.asarray(mb_obs, dtype=self.obs.dtype)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32)
