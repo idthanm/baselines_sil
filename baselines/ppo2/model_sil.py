@@ -46,6 +46,7 @@ class Model(object):
             else:
                 train_model = policy(microbatch_size, nsteps, sess)
             sil_model = policy(sess=sess)
+            sil_model_2 = policy(sess=sess)
 
         # CREATE THE PLACEHOLDERS
         self.A = A = train_model.pdtype.sample_placeholder([None])
@@ -122,7 +123,8 @@ class Model(object):
 
         self.sil = SelfImitation(sil_model.X, sil_model.vf, sil_model.entropy,
                                  sil_model.action, sil_model.value, sil_model.neg_log_prob,
-                                 ac_space, fn_reward=fn_reward, fn_obs=fn_obs,
+                                 ob_space, ac_space, sil_model_2.X, sil_model_2.vf,
+                                 fn_reward=fn_reward, fn_obs=fn_obs,
                                  n_env=nbatch_act, n_update=sil_update,
                                  w_value=sil_value, w_superv=superv_coef,
                                  w_entropy=ent_coef, gamma=gamma,

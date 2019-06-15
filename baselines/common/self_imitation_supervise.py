@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import random
 from gym import spaces
-
+from baselines.common.input import observation_placeholder, encode_observation
 from baselines.common.segment_tree import SumSegmentTree, MinSegmentTree
 from baselines.a2c.utils import discount_with_dones
 
@@ -23,8 +23,8 @@ class ReplayBuffer(object):
     def __len__(self):
         return len(self._storage)
     
-    def add(self, obs_t, action, R, for_mask):
-        data = (obs_t, action, R, for_mask)
+    def add(self, obs_t, action, reward, done, R, obs_tp1, for_mask, neglogp):
+        data = (obs_t, action, reward, done, R, obs_tp1, for_mask, neglogp)
 
         if self._next_idx >= len(self._storage):
             self._storage.append(data)
@@ -33,15 +33,20 @@ class ReplayBuffer(object):
         self._next_idx = (self._next_idx + 1) % self._maxsize
 
     def _encode_sample(self, idxes):
-        obses_t, actions, returns, for_masks= [], [], [], []
+        obses_t, actions, rewards, dones, returns, obses_tp1, for_masks, neglogps = [], [], [], [], [], [], [], []
         for i in idxes:
             data = self._storage[i]
-            obs_t, action, R , for_mask= data
+            obs_t, action, reward, done, R, obs_tp1, for_mask, neglogp = data
             obses_t.append(np.array(obs_t, copy=False))
             actions.append(np.array(action, copy=False))
+            rewards.append(reward)
+            dones.append(done)
             returns.append(R)
+            obses_tp1.append(np.array(obs_tp1, copy=False))
             for_masks.append(for_mask)
-        return np.array(obses_t), np.array(actions), np.array(returns), np.array(for_masks)
+            neglogps.append(neglogp)
+        return np.array(obses_t), np.array(actions), np.array(rewards), np.array(dones), np.array(returns), np.array(obses_t),\
+               np.array(for_masks), np.array(neglogps)
 
     def sample(self, batch_size):
         """Sample a batch of experiences.
@@ -182,7 +187,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 class SelfImitation(object):
     
     def __init__(self, model_ob, model_vf, model_entropy, model_action,
-            fn_value, fn_neg_log_prob, ac_space, fn_reward, fn_obs=None,
+            fn_value, fn_neg_log_prob, ob_space, ac_space, model2_ob, model2_vf, fn_reward, fn_obs=None,
             n_env=16, batch_size=512, n_update=4, 
             clip=1, w_value=0.01, w_entropy=0.01, w_superv=0.01,
             max_steps=int(1e5), gamma=0.99,
@@ -191,6 +196,8 @@ class SelfImitation(object):
 
         self.model_ob = model_ob
         self.model_vf = model_vf
+        self.model2_ob = model2_ob
+        self.model2_vf = model2_vf
         self.model_entropy = model_entropy
         self.model_action = model_action
         self.fn_value = fn_value
@@ -231,7 +238,11 @@ class SelfImitation(object):
 
         self.R = tf.placeholder(tf.float32, [None])
         self.W = tf.placeholder(tf.float32, [None])
+        self.NEXT_OBS = observation_placeholder(ob_space, batch_size=None)
         self.EPIREW = tf.placeholder(tf.float32, [None])
+        self.REW = tf.placeholder(tf.float32, [None])
+        self.DONE = tf.placeholder(tf.float32, [None])
+        self.neglogp_buff = tf.placeholder(tf.float32, [None])
         self.build_loss_op()
 
 
@@ -243,6 +254,7 @@ class SelfImitation(object):
         actions = []
         rewards = []
         dones = []
+        neglogps = []
         epirew_ = []
 
         if self.stack > 1:
@@ -250,7 +262,7 @@ class SelfImitation(object):
             nc = ob_shape[-1]
             ob_shape[-1] = nc*self.stack
             stacked_ob = np.zeros(ob_shape, dtype=trajectory[0][0].dtype)
-        for (ob, action, reward) in trajectory:
+        for (ob, action, reward, neglogp) in trajectory:
             if ob is not None:
                 x = self.fn_obs(ob) if self.fn_obs is not None else ob
                 if self.stack > 1:
@@ -265,14 +277,16 @@ class SelfImitation(object):
             rewards.append(self.fn_reward(reward))
             dones.append(False)
             epirew_.append(epirew)
-        dones[len(dones)-1]=True
+            neglogps.append(neglogp)
+        dones[len(dones)-1] = True
         returns = discount_with_dones(rewards, dones, self.gamma)
-        for (ob, action, R, for_mask) in list(zip(obs, actions, returns, epirew_)):
-            self.buffer.add(ob, action, R, for_mask)
+
+        for (ob, action, reward, done, R, next_obs, for_mask, neglogp) in list(zip(obs, actions, rewards, dones, returns, obs[1:]+[obs[0]], epirew_, neglogps)):
+            self.buffer.add(ob, action, reward, done, R, next_obs, for_mask, neglogp)
 
     def update_buffer(self, trajectory, epirew):
         positive_reward = False
-        for (ob, a, r) in trajectory:
+        for (ob, a, r, neglogp) in trajectory:
             if r > 0:
                 positive_reward = True
                 break
@@ -295,10 +309,10 @@ class SelfImitation(object):
             return np.max(self.total_rewards)
         return 0
 
-    def step(self, obs, actions, rewards, dones, infos):
+    def step(self, obs, actions, rewards, dones, infos, neglogpacs):
         for n in range(self.n_env):
             if self.n_update > 0:
-                self.running_episodes[n].append([obs[n], actions[n], rewards[n]])
+                self.running_episodes[n].append([obs[n], actions[n], rewards[n], neglogpacs[n]])
             else:
                 self.running_episodes[n].append([None, actions[n], rewards[n]])
 
@@ -313,19 +327,22 @@ class SelfImitation(object):
             batch_size = min(batch_size, len(self.buffer))
             return self.buffer.sample(batch_size, beta=self.beta)
         else:
-            return None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None, None, None
 
     def build_loss_op(self):
-        #mask = tf.where(self.R - 60 * tf.ones_like(self.R) > 0.0,
-        #        tf.ones_like(self.R), tf.zeros_like(self.R))
-        mask = tf.where(self.EPIREW - 60 * tf.ones_like(self.EPIREW) > 0.0,
-                tf.ones_like(self.EPIREW), tf.zeros_like(self.EPIREW))
+        mask = tf.where(self.R - self.model_vf > 0.0,
+                tf.ones_like(self.R), tf.zeros_like(self.R))
+        #mask = tf.where(self.EPIREW - 60 * tf.ones_like(self.EPIREW) > 0.0,
+        #        tf.ones_like(self.EPIREW), tf.zeros_like(self.EPIREW))
         # self.valid_samples = self.EPIREW * mask
         self.num_valid_samples = tf.reduce_sum(mask)
         self.num_samples = tf.maximum(self.num_valid_samples, self.min_batch_size)
        
         # Policy update
         nlogp = self.fn_neg_log_prob(self.A)
+        next_value_estimation = tf.squeeze(self.model2_vf) * (1.0 - self.DONE)
+        clipped_ISratio = tf.stop_gradient(tf.minimum(tf.exp(self.neglogp_buff - nlogp), 1))
+        advantage = tf.stop_gradient(self.REW + self.gamma * next_value_estimation - tf.squeeze(self.model_vf))
         clipped_nlogp = tf.stop_gradient(
                 tf.minimum(nlogp, self.max_nlogp) - nlogp) + nlogp
         
@@ -334,11 +351,15 @@ class SelfImitation(object):
         self.adv = tf.stop_gradient(
                 tf.clip_by_value(self.R - tf.squeeze(self.model_vf), 0.0, self.clip))
         self.mean_adv = tf.reduce_sum(self.adv) / self.num_samples
-        self.pg_loss = 0.0 * tf.reduce_sum(self.W * self.adv * clipped_nlogp * mask) / self.num_samples
+        # SIL loss
+        # self.pg_loss = 0.0 * tf.reduce_sum(self.W * self.adv * clipped_nlogp * mask) / self.num_samples
+
+        # off-policy ac
+        self.pg_loss = tf.reduce_sum(self.W * clipped_ISratio * advantage * clipped_nlogp * mask) / self.num_samples
 
 
         # Entropy regularization
-        entropy = 0.0 * tf.reduce_sum(self.W * self.model_entropy * mask) / self.num_samples
+        entropy = tf.reduce_sum(self.W * self.model_entropy * mask) / self.num_samples
         self.loss = self.pg_loss - entropy * self.w_entropy
 
         # Supervised term
@@ -348,10 +369,13 @@ class SelfImitation(object):
         self.loss += self.w_superv * self.superv_loss
             
         # Value update
-        v_target = self.R
+        # SIL loss
+        # v_target = self.R
+        # off-policy ac
+        v_target = self.REW + self.gamma * next_value_estimation
         v_estimate = tf.squeeze(self.model_vf)
-        delta = tf.clip_by_value(v_estimate - v_target, -self.clip, 0) * mask
-        self.vf_loss = 0.0 * tf.reduce_sum(self.W * v_estimate * tf.stop_gradient(delta)) / self.num_samples
+        delta = tf.clip_by_value(v_estimate - v_target, -self.clip, -self.clip) * mask
+        self.vf_loss = tf.reduce_sum(self.W * v_estimate * tf.stop_gradient(delta)) / self.num_samples
         self.loss += 0.5 * self.w_value * self.vf_loss
         self.sil_loss_names = ['policy_loss', 'entropy', 'value_loss', 'superv_loss']
         self.sil_stats_list = [self.pg_loss, entropy, self.vf_loss, self.superv_loss]
@@ -373,17 +397,22 @@ class SelfImitation(object):
         self.train_op = optim.apply_gradients(grads_and_var)
 
     def _train(self, sess, LR, lr):
-        obs, actions, returns, epirew, weights, idxes = self.sample_batch(self.batch_size)
+        obs, actions, rewards, dones, returns, next_obs, \
+        epirew, neglogps, weights, idxes = self.sample_batch(self.batch_size)
         if obs is None:
             return [0, 0, 0, 0], 0, 0, 0
 
         pg_loss, entropy, vf_loss, superv_loss, adv, mean_adv, samples, nlogp, _ = sess.run(
                 self.sil_stats_list + [self.adv, self.mean_adv, self.num_valid_samples,
                        self.neg_log_p, self.train_op],
-                {self.model_ob: obs, 
+                {self.model_ob: obs,
+                 self.model2_ob: next_obs,
                  self.A: actions,
                  LR: lr,
+                 self.neglogp_buff: neglogps,
                  self.EPIREW: epirew,
+                 self.REW: rewards,
+                 self.DONE: dones,
                  self.R: returns,
                  self.W: weights})
 
