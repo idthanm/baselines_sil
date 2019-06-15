@@ -341,7 +341,8 @@ class SelfImitation(object):
         # Policy update
         nlogp = self.fn_neg_log_prob(self.A)
         next_value_estimation = tf.squeeze(self.model2_vf) * (1.0 - self.DONE)
-        clipped_ISratio = tf.stop_gradient(tf.minimum(tf.exp(self.neglogp_buff - nlogp), 1))
+        is_ratio = tf.exp(self.neglogp_buff - nlogp)
+        clipped_ISratio = tf.stop_gradient(tf.minimum(is_ratio, 1))
         advantage = tf.stop_gradient(self.REW + self.gamma * next_value_estimation - tf.squeeze(self.model_vf))
         clipped_nlogp = tf.stop_gradient(
                 tf.minimum(nlogp, self.max_nlogp) - nlogp) + nlogp
@@ -355,7 +356,13 @@ class SelfImitation(object):
         # self.pg_loss = 0.0 * tf.reduce_sum(self.W * self.adv * clipped_nlogp * mask) / self.num_samples
 
         # off-policy ac
-        self.pg_loss = tf.reduce_sum(self.W * clipped_ISratio * advantage * clipped_nlogp * mask) / self.num_samples
+        # self.pg_loss = tf.reduce_sum(self.W * clipped_ISratio * advantage * clipped_nlogp * mask) / self.num_samples
+
+        # ppo_loss
+        self.new_ratio = tf.exp(tf.stop_gradient(nlogp) - nlogp)
+        pg_losses = -advantage * self.new_ratio * clipped_ISratio * mask
+        pg_losses2 = -advantage * tf.clip_by_value(self.new_ratio, 1.0 - 0.2, 1.0 + 0.2) * clipped_ISratio * mask
+        self.pg_loss = 0.5 * tf.reduce_sum(tf.maximum(pg_losses, pg_losses2)) / self.num_samples
 
 
         # Entropy regularization
@@ -373,9 +380,14 @@ class SelfImitation(object):
         # v_target = self.R
         # off-policy ac
         v_target = self.REW + self.gamma * next_value_estimation
-        v_estimate = tf.squeeze(self.model_vf)
-        delta = tf.clip_by_value(v_estimate - v_target, -self.clip, -self.clip) * mask
-        self.vf_loss = tf.reduce_sum(self.W * v_estimate * tf.stop_gradient(delta)) / self.num_samples
+        v_pred = tf.squeeze(self.model_vf)
+        vf_losses1 = tf.square((v_pred - v_target) * mask)
+        OLDVPRED = tf.stop_gradient(v_pred)
+        vpredclipped = OLDVPRED + tf.clip_by_value(v_pred - OLDVPRED, - 0.2, 0.2)
+        vf_losses2 = tf.square((vpredclipped - v_target) * mask)
+        self.vf_loss = .5 * tf.reduce_sum(tf.maximum(vf_losses1, vf_losses2)) / self.num_samples
+        # delta = tf.clip_by_value(v_estimate - v_target, -self.clip, -self.clip) * mask
+        # self.vf_loss = tf.reduce_sum(self.W * clipped_ISratio * v_estimate * tf.stop_gradient(delta)) / self.num_samples
         self.loss += 0.5 * self.w_value * self.vf_loss
         self.sil_loss_names = ['policy_loss', 'entropy', 'value_loss', 'superv_loss']
         self.sil_stats_list = [self.pg_loss, entropy, self.vf_loss, self.superv_loss]
