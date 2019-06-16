@@ -379,7 +379,7 @@ class SelfImitation(object):
         # SIL loss
         # v_target = self.R
         # off-policy ac
-        v_target = self.REW + self.gamma * next_value_estimation
+        v_target = (self.REW + self.gamma * next_value_estimation) * clipped_ISratio
         v_pred = tf.squeeze(self.model_vf)
         vf_losses1 = tf.square((v_pred - v_target) * mask)
         OLDVPRED = tf.stop_gradient(v_pred)
@@ -388,7 +388,7 @@ class SelfImitation(object):
         self.vf_loss = .5 * tf.reduce_sum(tf.maximum(vf_losses1, vf_losses2)) / self.num_samples
         # delta = tf.clip_by_value(v_estimate - v_target, -self.clip, -self.clip) * mask
         # self.vf_loss = tf.reduce_sum(self.W * clipped_ISratio * v_estimate * tf.stop_gradient(delta)) / self.num_samples
-        self.loss += 0.5 * self.w_value * self.vf_loss
+        self.loss += self.w_value * self.vf_loss
         self.sil_loss_names = ['policy_loss', 'entropy', 'value_loss', 'superv_loss']
         self.sil_stats_list = [self.pg_loss, entropy, self.vf_loss, self.superv_loss]
         return self.loss
@@ -420,7 +420,7 @@ class SelfImitation(object):
                 {self.model_ob: obs,
                  self.model2_ob: next_obs,
                  self.A: actions,
-                 LR: lr,
+                 LR: 0.5 * lr,
                  self.neglogp_buff: neglogps,
                  self.EPIREW: epirew,
                  self.REW: rewards,
