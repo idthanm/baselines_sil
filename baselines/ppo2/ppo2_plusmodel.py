@@ -89,7 +89,7 @@ def learn(*, network, env, total_timesteps, model_env = None, seed=None, nsteps=
     if MPI is not None and comm is None:
         comm = MPI.COMM_WORLD
 
-    model_env = make_vec_env('CentralDecision-v1', 'user', 1, seed=None)
+    model_env = make_vec_env('CentralDecision-v0', 'user', 1, seed=None)
     model_env = VecNormalize(model_env, use_tf=True)
 
 
