@@ -86,7 +86,7 @@ def make_env(env_id, env_type, mpi_rank=0, subrank=0, seed=None, reward_scale=1.
 
     env.seed(seed + subrank if seed is not None else None)
     env = Monitor(env,
-                  logger_dir and os.path.join(logger_dir, str(mpi_rank) + '.' + str(subrank)),
+                  logger_dir and os.path.join(logger_dir, str(mpi_rank) + '.' + str(subrank) + env_id),
                   allow_early_resets=True)
 
 
@@ -162,7 +162,7 @@ def common_arg_parser():
     parser.add_argument('--env_type', help='type of environment, used when the environment type cannot be automatically determined', type=str)
     parser.add_argument('--seed', help='RNG seed', type=int, default=None)
     parser.add_argument('--alg', help='Algorithm', type=str, default='ppo2')
-    parser.add_argument('--num_timesteps', type=float, default=1e8),
+    parser.add_argument('--num_timesteps', type=float, default=5e7),
     parser.add_argument('--network', help='network type (mlp, cnn, lstm, cnn_lstm, conv_only)', default=None)
     parser.add_argument('--gamestate', help='game state to load (so far only used in retro games)', default=None)
     parser.add_argument('--num_env', help='Number of environment copies being run in parallel. When not specified, set to number of cpus for Atari, and to 1 for Mujoco', default=None, type=int)
