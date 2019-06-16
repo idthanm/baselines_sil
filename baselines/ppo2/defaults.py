@@ -38,9 +38,9 @@ def user():
         lr=lambda f: 3e-4 * f,
         cliprange=0.2,
         value_network='copy',
-        superv_coef=0.0,
-        sil_value=0.01,
-        sil_update=10,
-        sil_alpha=0.6,
-        sil_beta=0.1
+        # superv_coef=0.0,
+        # sil_value=0.01,
+        # sil_update=10,
+        # sil_alpha=0.6,
+        # sil_beta=0.1
     )
