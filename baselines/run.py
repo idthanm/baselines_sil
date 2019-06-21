@@ -220,7 +220,9 @@ def main(args):
         model.save(save_path)
 
     if args.play:
+        model.load('path + checkpoint')
         logger.log("Running trained model")
+
         obs = env.reset()
 
         state = model.initial_state if hasattr(model, 'initial_state') else None
