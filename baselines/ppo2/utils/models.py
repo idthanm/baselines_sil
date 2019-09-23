@@ -27,7 +27,7 @@ def nature_cnn(unscaled_images, **conv_kwargs):
 
 
 def cnn_plus_fc_fn(grids, vector, **conv_kwargs):
-
+    grids = tf.transpose(grids, [0, 2, 3, 1])
     scaled_images = tf.cast(grids, tf.float32)
     activ = tf.nn.relu
     h = activ(conv(scaled_images, 'c1', nf=32, rf=8, stride=4, init_scale=np.sqrt(2),
