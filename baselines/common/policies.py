@@ -53,7 +53,6 @@ class PolicyWithValue(object):
 
         # Calculate the neg log of our probability
         self.neglogp = self.pd.neglogp(self.action)
-        self.entropy = self.pd.entropy()
         self.sess = sess or tf.get_default_session()
 
         if estimate_q:
@@ -74,9 +73,6 @@ class PolicyWithValue(object):
                     feed_dict[inpt] = adjust_shape(inpt, data)
 
         return sess.run(variables, feed_dict)
-
-    def neg_log_prob(self, actions):
-        return self.pd.neglogp(actions)
 
     def step(self, observation, **extra_feed):
         """

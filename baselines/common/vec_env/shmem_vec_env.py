@@ -2,9 +2,9 @@
 An interface for asynchronous vectorized environments.
 """
 
-import multiprocessing as mp
+from multiprocessing import Pipe, Array, Process
 import numpy as np
-from .vec_env import VecEnv, CloudpickleWrapper, clear_mpi_env_vars
+from . import VecEnv, CloudpickleWrapper
 import ctypes
 from baselines import logger
 
@@ -22,12 +22,11 @@ class ShmemVecEnv(VecEnv):
     Optimized version of SubprocVecEnv that uses shared variables to communicate observations.
     """
 
-    def __init__(self, env_fns, spaces=None, context='spawn'):
+    def __init__(self, env_fns, spaces=None):
         """
         If you don't specify observation_space, we'll have to create a dummy
         environment to get it.
         """
-        ctx = mp.get_context(context)
         if spaces:
             observation_space, action_space = spaces
         else:
@@ -40,22 +39,22 @@ class ShmemVecEnv(VecEnv):
         VecEnv.__init__(self, len(env_fns), observation_space, action_space)
         self.obs_keys, self.obs_shapes, self.obs_dtypes = obs_space_info(observation_space)
         self.obs_bufs = [
-            {k: ctx.Array(_NP_TO_CT[self.obs_dtypes[k].type], int(np.prod(self.obs_shapes[k]))) for k in self.obs_keys}
+            {k: Array(_NP_TO_CT[self.obs_dtypes[k].type], int(np.prod(self.obs_shapes[k]))) for k in self.obs_keys}
             for _ in env_fns]
         self.parent_pipes = []
         self.procs = []
-        with clear_mpi_env_vars():
-            for env_fn, obs_buf in zip(env_fns, self.obs_bufs):
-                wrapped_fn = CloudpickleWrapper(env_fn)
-                parent_pipe, child_pipe = ctx.Pipe()
-                proc = ctx.Process(target=_subproc_worker,
-                            args=(child_pipe, parent_pipe, wrapped_fn, obs_buf, self.obs_shapes, self.obs_dtypes, self.obs_keys))
-                proc.daemon = True
-                self.procs.append(proc)
-                self.parent_pipes.append(parent_pipe)
-                proc.start()
-                child_pipe.close()
+        for env_fn, obs_buf in zip(env_fns, self.obs_bufs):
+            wrapped_fn = CloudpickleWrapper(env_fn)
+            parent_pipe, child_pipe = Pipe()
+            proc = Process(target=_subproc_worker,
+                           args=(child_pipe, parent_pipe, wrapped_fn, obs_buf, self.obs_shapes, self.obs_dtypes, self.obs_keys))
+            proc.daemon = True
+            self.procs.append(proc)
+            self.parent_pipes.append(parent_pipe)
+            proc.start()
+            child_pipe.close()
         self.waiting_step = False
+        self.specs = [f().spec for f in env_fns]
         self.viewer = None
 
     def reset(self):
@@ -70,11 +69,9 @@ class ShmemVecEnv(VecEnv):
         assert len(actions) == len(self.parent_pipes)
         for pipe, act in zip(self.parent_pipes, actions):
             pipe.send(('step', act))
-        self.waiting_step = True
 
     def step_wait(self):
         outs = [pipe.recv() for pipe in self.parent_pipes]
-        self.waiting_step = False
         obs, rews, dones, infos = zip(*outs)
         return self._decode_obses(obs), np.array(rews), np.array(dones), infos
 

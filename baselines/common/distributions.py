@@ -206,8 +206,7 @@ class CategoricalPd(Pd):
 class MultiCategoricalPd(Pd):
     def __init__(self, nvec, flat):
         self.flat = flat
-        self.categoricals = list(map(CategoricalPd,
-            tf.split(flat, np.array(nvec, dtype=np.int32), axis=-1)))
+        self.categoricals = list(map(CategoricalPd, tf.split(flat, nvec, axis=-1)))
     def flatparam(self):
         return self.flat
     def mode(self):
@@ -236,6 +235,7 @@ class DiagGaussianPd(Pd):
     def mode(self):
         return self.mean
     def neglogp(self, x):
+        # calculate probability density of x (x can be an array)
         return 0.5 * tf.reduce_sum(tf.square((x - self.mean) / self.std), axis=-1) \
                + 0.5 * np.log(2.0 * np.pi) * tf.to_float(tf.shape(x)[-1]) \
                + tf.reduce_sum(self.logstd, axis=-1)

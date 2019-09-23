@@ -1,4 +1,5 @@
 import re
+import os.path as osp
 import os
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -19,7 +20,7 @@ def register_benchmark(benchmark):
     if 'tasks' in benchmark:
         for t in benchmark['tasks']:
             if 'desc' not in t:
-                t['desc'] = remove_version_re.sub('', t.get('env_id', t.get('id')))
+                t['desc'] = remove_version_re.sub('', t['env_id'])
     _BENCHMARKS.append(benchmark)
 
 

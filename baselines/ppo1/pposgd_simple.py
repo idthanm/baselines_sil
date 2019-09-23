@@ -12,7 +12,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
     t = 0
     ac = env.action_space.sample() # not used, just so we have the datatype
     new = True # marks if we're on first timestep of an episode
-    ob = env.reset()
+    ob = env.manualSet(modelList=env.pattern)
 
     cur_ep_ret = 0 # return in current episode
     cur_ep_len = 0 # len of current episode
@@ -48,7 +48,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
         acs[i] = ac
         prevacs[i] = prevac
 
-        ob, rew, new, _ = env.step(ac)
+        ob, rew, new, _ = env.updateEnv(ac)
         rews[i] = rew
 
         cur_ep_ret += rew
@@ -58,7 +58,7 @@ def traj_segment_generator(pi, env, horizon, stochastic):
             ep_lens.append(cur_ep_len)
             cur_ep_ret = 0
             cur_ep_len = 0
-            ob = env.reset()
+            ob = env.manualSet(modelList=env.pattern)
         t += 1
 
 def add_vtarg_and_adv(seg, gamma, lam):
@@ -85,7 +85,8 @@ def learn(env, policy_fn, *,
         max_timesteps=0, max_episodes=0, max_iters=0, max_seconds=0,  # time constraint
         callback=None, # you can do anything in the callback, since it takes locals(), globals()
         adam_epsilon=1e-5,
-        schedule='constant' # annealing for stepsize parameters (epsilon and adam)
+        schedule='constant', # annealing for stepsize parameters (epsilon and adam)
+        load_model_path=None
         ):
     # Setup losses and stuff
     # ----------------------------------------
@@ -97,6 +98,7 @@ def learn(env, policy_fn, *,
     ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
     lrmult = tf.placeholder(name='lrmult', dtype=tf.float32, shape=[]) # learning rate multiplier, updated with schedule
+    clip_param = clip_param * lrmult # Annealed clipping parameter epsilon
 
     ob = U.get_placeholder_cached(name="ob")
     ac = pi.pdtype.sample_placeholder([None])
@@ -123,9 +125,14 @@ def learn(env, policy_fn, *,
     assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
         for (oldv, newv) in zipsame(oldpi.get_variables(), pi.get_variables())])
     compute_losses = U.function([ob, ac, atarg, ret, lrmult], losses)
-
-    U.initialize()
+    previous_trained_model_episodenum = 0
+    if not load_model_path:
+        U.initialize()
+    else:
+        U.load_state(load_model_path)
+        previous_trained_model_episodenum = get_previous_trained_model_episodenum(load_model_path)
     adam.sync()
+
 
     # Prepare for rollouts
     # ----------------------------------------
@@ -139,6 +146,12 @@ def learn(env, policy_fn, *,
     rewbuffer = deque(maxlen=100) # rolling buffer for episode rewards
 
     assert sum([max_iters>0, max_timesteps>0, max_episodes>0, max_seconds>0])==1, "Only one time constraint permitted"
+    # collecting data for tensorboard
+    # ---------------------------------------
+    # sess = U.get_session()
+    # summ_writer = tf.summary.FileWriter('E:\Research\Reinforcement Learning\openai_baseline\\baselines\\toyota\summary',
+    #                                    sess.graph)
+
 
     while True:
         if callback: callback(locals(), globals())
@@ -167,7 +180,7 @@ def learn(env, policy_fn, *,
         ob, ac, atarg, tdlamret = seg["ob"], seg["ac"], seg["adv"], seg["tdlamret"]
         vpredbefore = seg["vpred"] # predicted value function before udpate
         atarg = (atarg - atarg.mean()) / atarg.std() # standardized advantage function estimate
-        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), deterministic=pi.recurrent)
+        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=not pi.recurrent)
         optim_batchsize = optim_batchsize or ob.shape[0]
 
         if hasattr(pi, "ob_rms"): pi.ob_rms.update(ob) # update running mean/std for policy
@@ -208,10 +221,20 @@ def learn(env, policy_fn, *,
         logger.record_tabular("EpisodesSoFar", episodes_so_far)
         logger.record_tabular("TimestepsSoFar", timesteps_so_far)
         logger.record_tabular("TimeElapsed", time.time() - tstart)
-        if MPI.COMM_WORLD.Get_rank()==0:
+
+        if MPI.COMM_WORLD.Get_rank() == 0:
+            if iters_so_far % 100 == 1:
+                U.save_state('E:\\Project\\Toyota RL\\Toyata 2018\\Toyata RL 4th quarter\\model\\intersection_policy',
+                             global_step=episodes_so_far+previous_trained_model_episodenum, write_meta_graph=False)
+                # 'F:\\GuanYang\\toyota2018_4\\model\\intersection_policy'
             logger.dump_tabular()
 
     return pi
 
+
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]
+
+
+def get_previous_trained_model_episodenum(load_model_path):
+    return int((load_model_path.split('\\')[-1]).split('-')[-1])

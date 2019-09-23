@@ -9,6 +9,7 @@ from gym.spaces import Discrete, Box
 class MnistEnv(Env):
     def __init__(
             self,
+            seed=0,
             episode_len=None,
             no_images=None
     ):
@@ -22,6 +23,7 @@ class MnistEnv(Env):
            self.mnist = input_data.read_data_sets(mnist_path)
 
         self.np_random = np.random.RandomState()
+        self.np_random.seed(seed)
 
         self.observation_space = Box(low=0.0, high=1.0, shape=(28,28,1))
         self.action_space = Discrete(10)
@@ -47,9 +49,6 @@ class MnistEnv(Env):
             done = True
 
         return self.state[0], rew, done, {}
-
-    def seed(self, seed=None):
-        self.np_random.seed(seed)
 
     def train_mode(self):
         self.dataset = self.mnist.train

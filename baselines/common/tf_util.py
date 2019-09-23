@@ -1,3 +1,4 @@
+import joblib
 import numpy as np
 import tensorflow as tf  # pylint: ignore-module
 import copy
@@ -305,17 +306,12 @@ def display_var_info(vars):
     logger.info("Total model parameters: %0.2f million" % (count_params*1e-6))
 
 
-def get_available_gpus(session_config=None):
-    # based on recipe from https://stackoverflow.com/a/38580201
-
-    # Unless we allocate a session here, subsequent attempts to create one
-    # will ignore our custom config (in particular, allow_growth=True will have
-    # no effect).
-    if session_config is None:
-        session_config = get_session()._config
+def get_available_gpus():
+    # recipe from here:
+    # https://stackoverflow.com/questions/38559755/how-to-get-current-available-gpus-in-tensorflow?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
 
     from tensorflow.python.client import device_lib
-    local_device_protos = device_lib.list_local_devices(session_config)
+    local_device_protos = device_lib.list_local_devices()
     return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 # ================================================================
@@ -329,7 +325,7 @@ def load_state(fname, sess=None):
     saver = tf.train.Saver()
     saver.restore(tf.get_default_session(), fname)
 
-def save_state(fname, sess=None):
+def save_state(fname, sess=None, global_step=None, write_meta_graph=None):
     from baselines import logger
     logger.warn('save_state method is deprecated, please use save_variables instead')
     sess = sess or get_session()
@@ -337,13 +333,12 @@ def save_state(fname, sess=None):
     if any(dirname):
         os.makedirs(dirname, exist_ok=True)
     saver = tf.train.Saver()
-    saver.save(tf.get_default_session(), fname)
+    saver.save(tf.get_default_session(), fname, global_step, write_meta_graph=write_meta_graph)
 
 # The methods above and below are clearly doing the same thing, and in a rather similar way
 # TODO: ensure there is no subtle differences and remove one
 
 def save_variables(save_path, variables=None, sess=None):
-    import joblib
     sess = sess or get_session()
     variables = variables or tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
 
@@ -355,7 +350,6 @@ def save_variables(save_path, variables=None, sess=None):
     joblib.dump(save_dict, save_path)
 
 def load_variables(load_path, variables=None, sess=None):
-    import joblib
     sess = sess or get_session()
     variables = variables or tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
 
