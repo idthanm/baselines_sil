@@ -7,7 +7,8 @@ from collections import defaultdict
 import tensorflow as tf
 import numpy as np
 
-from baselines.common.vec_env import VecFrameStack, VecNormalize, VecEnv
+from baselines.common.vec_env import VecFrameStack, VecEnv
+from baselines.ppo2.utils.vec_normalize import VecNormalize
 from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
 from baselines.common.tf_util import get_session
@@ -32,7 +33,7 @@ except ImportError:
 _game_envs = defaultdict(set)
 for env in gym.envs.registry.all():
     # TODO: solve this with regexes
-    env_type = env._entry_point.split(':')[0].split('.')[-1]
+    env_type = env.entry_point.split(':')[0].split('.')[-1]
     _game_envs[env_type].add(env.id)
 
 # reading benchmark names directly from retro requires
@@ -109,10 +110,10 @@ def build_env(args):
         config.gpu_options.allow_growth = True
         get_session(config=config)
 
-        flatten_dict_observations = alg not in {'her'}
+        flatten_dict_observations = alg not in {'her', 'ppo2'}
         env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
 
-        if env_type == 'mujoco' or 'user':
+        if env_type == 'mujoco' or 'user' or 'user_defined':
             env = VecNormalize(env, use_tf=True)
 
     return env
