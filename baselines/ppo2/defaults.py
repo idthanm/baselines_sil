@@ -47,5 +47,8 @@ def user():
 
 def user_defined():
     defaults = mujoco()
-    defaults.update({'data_format': 'NCHW'})
+    defaults.update(dict(data_format='NCHW',
+                         nsteps=128,
+                         nminibatches=4,
+                         noptepochs=4,))
     return defaults
