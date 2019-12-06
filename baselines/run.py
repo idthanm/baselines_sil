@@ -50,6 +50,7 @@ _game_envs['retro'] = {
     'FinalFight-Snes',
     'SpaceInvaders-Snes',
 }
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def train(args, extra_args):
