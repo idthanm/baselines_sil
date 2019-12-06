@@ -2,6 +2,7 @@ import sys
 import re
 import multiprocessing
 import os.path as osp
+import os
 import gym
 from collections import defaultdict
 import tensorflow as tf
@@ -213,6 +214,14 @@ def main(args):
     else:
         rank = MPI.COMM_WORLD.Get_rank()
         configure_logger(args.log_path, format_strs=[])
+
+    if MPI is not None:
+        n = MPI.COMM_WORLD.Get_size()
+        rank = MPI.COMM_WORLD.Get_rank()
+        if rank < n/2:
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        else:
+            os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
     model, env = train(args, extra_args)
 

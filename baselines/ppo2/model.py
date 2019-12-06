@@ -26,7 +26,7 @@ class Model(object):
     """
     def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
                 nsteps, ent_coef, vf_coef, max_grad_norm, mpi_rank_weight=1, comm=None, microbatch_size=None):
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.05)
         self.sess = sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
                                                                        gpu_options=gpu_options))
         # self.sess = sess = get_session()
