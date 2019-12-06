@@ -3,9 +3,9 @@ import functools
 
 from baselines.common.tf_util import get_session, save_variables, load_variables
 from baselines.common.tf_util import initialize
+from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
 
 try:
-    from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
     from mpi4py import MPI
     from baselines.common.mpi_util import sync_from_root
 except ImportError:
@@ -26,7 +26,10 @@ class Model(object):
     """
     def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
                 nsteps, ent_coef, vf_coef, max_grad_norm, mpi_rank_weight=1, comm=None, microbatch_size=None):
-        self.sess = sess = get_session()
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
+        self.sess = sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
+                                                                       gpu_options=gpu_options))
+        # self.sess = sess = get_session()
 
         if MPI is not None and comm is None:
             comm = MPI.COMM_WORLD
