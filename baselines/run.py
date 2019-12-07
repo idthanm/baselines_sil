@@ -108,12 +108,14 @@ def build_env(args):
             env = VecFrameStack(env, frame_stack_size)
 
     else:
-        config = tf.ConfigProto(allow_soft_placement=True,
-                               intra_op_parallelism_threads=1,
-                               inter_op_parallelism_threads=1)
-        config.gpu_options.allow_growth = True
-        get_session(config=config)
-
+        # config = tf.ConfigProto(allow_soft_placement=True,
+        #                        intra_op_parallelism_threads=1,
+        #                        inter_op_parallelism_threads=1)
+        # config.gpu_options.allow_growth = True
+        # get_session(config=config)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+        sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
+                                                           gpu_options=gpu_options))
         flatten_dict_observations = alg not in {'her', 'ppo2'}
         env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
 
