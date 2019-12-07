@@ -255,7 +255,6 @@ def main(args):
             if done:
                 print('episode_rew={}'.format(episode_rew))
                 episode_rew = 0
-                obs = env.reset()
 
     env.close()
 
