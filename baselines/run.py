@@ -6,6 +6,9 @@ import os
 import gym
 from collections import defaultdict
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.logging.set_verbosity(tf.logging.ERROR)
 import numpy as np
 
 from baselines.common.vec_env import VecFrameStack, VecEnv
@@ -50,7 +53,6 @@ _game_envs['retro'] = {
     'FinalFight-Snes',
     'SpaceInvaders-Snes',
 }
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def train(args, extra_args):
