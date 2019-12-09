@@ -50,6 +50,7 @@ class PolicyWithValue(object):
 
         # Take an action
         self.action = self.pd.sample()
+        # self.action = self.pd.mode()
 
         # Calculate the neg log of our probability
         self.neglogp = self.pd.neglogp(self.action)
