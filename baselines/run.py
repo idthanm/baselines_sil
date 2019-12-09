@@ -10,12 +10,12 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
 import numpy as np
-OBS_TYPE = 0
+OBS_TYPE = 1
 
 from baselines.common.vec_env import VecFrameStack, VecEnv
 if OBS_TYPE == 0:
     from baselines.common.vec_env.vec_normalize import VecNormalize
-elif OBS_TYPE == 2:
+elif OBS_TYPE == 1 or OBS_TYPE == 2:
     from baselines.ppo2.utils.vec_normalize import VecNormalize
 from baselines.common.vec_env.vec_video_recorder import VecVideoRecorder
 from baselines.common.cmd_util import common_arg_parser, parse_unknown_args, make_vec_env, make_env
