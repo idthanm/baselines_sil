@@ -10,7 +10,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 tf.logging.set_verbosity(tf.logging.ERROR)
 import numpy as np
-OBS_TYPE = 0
+OBS_TYPE = 1
 
 from baselines.common.vec_env import VecFrameStack, VecEnv
 if OBS_TYPE == 0:
