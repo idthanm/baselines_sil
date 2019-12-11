@@ -35,9 +35,16 @@ def cnn_plus_fc_fn(grids, vector, **conv_kwargs):
     h2 = activ(conv(h, 'c2', nf=64, rf=4, stride=2, init_scale=np.sqrt(2), **conv_kwargs))
     h3 = activ(conv(h2, 'c3', nf=64, rf=3, stride=1, init_scale=np.sqrt(2), **conv_kwargs))
     h3 = conv_to_fc(h3)
+    # A1
     h3 = tf.concat([h3, vector], axis=1)
-    h4 = activ(fc(h3, 'fc1', nh=512, init_scale=np.sqrt(2)))
-    return activ(fc(h4, 'fc2', nh=128, init_scale=np.sqrt(2)))
+    out = activ(fc(h3, 'fc1', nh=512, init_scale=np.sqrt(2)))
+    # A2
+    # h3 = activ(fc(h3, 'fc1', nh=512, init_scale=np.sqrt(2)))
+    # h3 = tf.concat([h3, vector], axis=1)
+    # h3 = activ(fc(h3, 'fc2', nh=128, init_scale=np.sqrt(2)))
+    # out = activ(fc(h3, 'fc3', nh=128, init_scale=np.sqrt(2)))
+    return out
+
 
 
 def impala_cnn_plus_vector_fn(grids, vector, depths=[16, 32, 32], **conv_kwargs):
@@ -78,10 +85,15 @@ def impala_cnn_plus_vector_fn(grids, vector, depths=[16, 32, 32], **conv_kwargs)
         out = conv_sequence(out, depth)
 
     out = tf.layers.flatten(out)
-    out = tf.concat([out, vector], axis=1)
     out = tf.nn.relu(out)
+    # A4
     out = tf.layers.dense(out, 256, activation=tf.nn.relu, name='layer_' + get_layer_num_str())
-
+    out = tf.concat([out, vector], axis=1)
+    out = tf.layers.dense(out, 256, activation=tf.nn.relu, name='layer_' + get_layer_num_str())
+    out = tf.layers.dense(out, 128, activation=tf.nn.relu, name='layer_' + get_layer_num_str())
+    # A3
+    # out = tf.concat([out, vector], axis=1)
+    # out = tf.layers.dense(out, 256, activation=tf.nn.relu, name='layer_' + get_layer_num_str())
     return out
 
 
