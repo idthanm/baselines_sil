@@ -44,3 +44,11 @@ def user():
         # sil_alpha=0.6,
         # sil_beta=0.1
     )
+
+
+def user_defined():
+    defaults = mujoco()
+    defaults.update(dict(nsteps=256,
+                         nminibatches=8,
+                         noptepochs=10,))
+    return defaults
