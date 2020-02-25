@@ -1,6 +1,7 @@
 import numpy as np
 from baselines.common.runners import AbstractEnvRunner
 
+
 class Runner(AbstractEnvRunner):
     """
     We use this object to make a mini batch of experiences
@@ -10,12 +11,13 @@ class Runner(AbstractEnvRunner):
     run():
     - Make a mini batch
     """
-    def __init__(self, *, env, model, nsteps, gamma, lam):
+    def __init__(self, *, env, model, nsteps, gamma, lam, render=False):
         super().__init__(env=env, model=model, nsteps=nsteps)
         # Lambda used in GAE (General Advantage Estimation)
         self.lam = lam
         # Discount rate
         self.gamma = gamma
+        self.render = render
 
     def run(self):
         # Here, we init the lists that will contain the mb of experiences
@@ -36,7 +38,8 @@ class Runner(AbstractEnvRunner):
             # Take actions in env and look the results
             # Infos contains a ton of useful informations
             self.obs[:], rewards, self.dones, infos = self.env.step(actions)
-            # self.env.render()
+            if self.render:
+                self.env.render()
             for info in infos:
                 maybeepinfo = info.get('episode')
                 if maybeepinfo: epinfos.append(maybeepinfo)

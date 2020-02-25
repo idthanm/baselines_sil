@@ -60,6 +60,7 @@ def train(args, extra_args):
     learn = get_learn_function(args.alg, args.alg_submodule)
     alg_kwargs = get_learn_function_defaults(args.alg, env_type)
     alg_kwargs.update(extra_args)
+    alg_kwargs['render'] = args.render
 
     env = build_env(args)
     if args.save_video_interval != 0:
@@ -110,7 +111,11 @@ def build_env(args):
         get_session(config=config)
 
         flatten_dict_observations = alg not in {'her'}
-        env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, flatten_dict_observations=flatten_dict_observations)
+        env_kwargs = None
+        if env_type == 'user_defined':
+            env_kwargs = {'training_task': args.training_task}
+        env = make_vec_env(env_id, env_type, args.num_env or 1, seed, reward_scale=args.reward_scale, env_kwargs=env_kwargs,
+                           flatten_dict_observations=flatten_dict_observations)
 
         if env_type == 'mujoco' or 'user_defined':
             env = VecNormalize(env, use_tf=True)
